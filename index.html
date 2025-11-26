@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>關東國小校園植物導覽地圖</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+        @keyframes bounce-slight {
+            0%, 100% { transform: translate(-50%, -50%) scale(1); }
+            50% { transform: translate(-50%, -60%) scale(1.1); }
+        }
+        .marker-bounce:hover { animation: bounce-slight 0.5s infinite; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="text/babel">
+        const { useState, useMemo } = React;
+
+        // --- 內建圖示元件 (修正錯誤的核心) ---
+        const Icon = ({ children, size = 24, className, ...props }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}>
+                {children}
+            </svg>
+        );
+        const MapPin = (props) => <Icon {...props}><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" /><circle cx="12" cy="10" r="3" /></Icon>;
+        const Search = (props) => <Icon {...props}><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></Icon>;
+        const Leaf = (props) => <Icon {...props}><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 .5 3.5-1.1 9.2A7 7 0 0 1 11 20Z" /><path d="m8 21 4-4" /></Icon>;
+        const Info = (props) => <Icon {...props}><circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" /></Icon>;
+        const X = (props) => <Icon {...props}><path d="M18 6 6 18" /><path d="m6 6 12 12" /></Icon>;
+        const TreeDeciduous = (props) => <Icon {...props}><path d="M8 19h8a4 4 0 0 0 3.8-2.8 4 4 0 0 0-1.6-4.5c.2-1 .3-2 .3-3a8 8 0 0 0-13.3-5.4 8 8 0 0 0-2.4 10.3 4 4 0 0 0 1.6 4.5A4 4 0 0 0 8 19Z" /><path d="M12 19v3" /></Icon>;
+        const Flower2 = (props) => <Icon {...props}><circle cx="12" cy="12" r="2" /><path d="M12 16a4 4 0 0 1-2.8-6.9" /><path d="M12 8a4 4 0 0 1 2.8 6.9" /><path d="M16 12a4 4 0 0 1-6.9 2.8" /><path d="M8 12a4 4 0 0 1 6.9-2.8" /></Icon>;
+        const Sprout = (props) => <Icon {...props}><path d="M7 20h10" /><path d="M10 20c5.5-2.5.8-6.4 3-10" /><path d="M9.5 9.4c1.1.8 1.8 2.2 2.3 3.7-2 .4-3.2.4-4.8-.3-1.2-.6-2.3-1.9-3-4.2 2.8-.5 4.4 0 5.5.8Z" /><path d="M14.1 6a7 7 0 0 0-1.1 4c1.9-.1 3.3-.6 4.3-1.4 1-1 1.6-2.3 1.7-4.6-2.7.1-4 1-4.9 2Z" /></Icon>;
+        const AlertTriangle = (props) => <Icon {...props}><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" /><path d="M12 9v4" /><path d="M12 17h.01" /></Icon>;
+
+        // --- 植物資料 (使用網路圖片連結) ---
+        const PLANTS_DATA = [
+          {
+            id: 1,
+            name: "榕樹",
+            aliases: "細葉榕、正榕",
+            category: "tree",
+            imageUrl: "https://images.unsplash.com/photo-1597907465349-2793b243c942?q=80&w=800", 
+            locations: [{ x: 35, y: 25 }, { x: 60, y: 78 }, { x: 70, y: 78 }],
+            description: "常綠大喬木，氣根發達，常懸垂而下。校門口的精神象徵。",
+            features: "氣根、隱花果、白色乳汁",
+            area: "北校門、關愛樓前"
+          },
+          {
+            id: 2,
+            name: "龍柏",
+            aliases: "圓柏、繞龍柏",
+            category: "tree",
+            imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/6/62/Juniperus_chinensis_Kaizuka_01.JPG/640px-Juniperus_chinensis_Kaizuka_01.JPG",
+            locations: [{ x: 10, y: 20 }],
+            description: "常綠喬木，樹幹常選轉如龍抱柱而得名。葉片呈鱗片狀。",
+            features: "樹形優美、全株具香氣",
+            area: "關懷樓周邊"
+          },
+          {
+            id: 16,
+            name: "橘子 (四季橘)",
+            aliases: "四季桔",
+            category: "tree",
+            imageUrl: "https://images.unsplash.com/photo-1611080626919-7cf5a9dbab5b?q=80&w=800",
+            locations: [{ x: 28, y: 15 }],
+            description: "芸香科植物，果實金黃討喜，葉片有翼葉是其特徵。",
+            features: "果實圓形、葉有香氣",
+            area: "關懷樓前"
+          },
+          {
+            id: 17,
+            name: "檸檬",
+            aliases: "西檸檬",
+            category: "tree",
+            imageUrl: "https://images.unsplash.com/photo-1595855709940-5771d78d0322?q=80&w=800",
+            locations: [{ x: 30, y: 12 }],
+            description: "常綠灌木或小喬木，果實橢圓形，兩端狹窄，果汁酸。",
+            features: "葉柄具狹翼、枝條有刺",
+            area: "關懷樓前"
+          },
+          {
+            id: 18,
+            name: "枇杷",
+            aliases: "盧橘",
+            category: "tree",
+            imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f1/Eriobotrya_japonica_MS_6308.JPG/640px-Eriobotrya_japonica_MS_6308.JPG",
+            locations: [{ x: 25, y: 12 }],
+            description: "常綠小喬木，葉片大而厚，邊緣有鋸齒，果實黃橙色。",
+            features: "葉背密生絨毛、果實可食",
+            area: "關懷樓前"
+          },
+          {
+            id: 19,
+            name: "珊瑚刺桐",
+            aliases: "龍牙花",
+            category: "tree",
+            imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/9/99/Erythrina_corallodendron_3.jpg/640px-Erythrina_corallodendron_3.jpg",
+            locations: [{ x: 22, y: 12 }],
+            description: "落葉小喬木，花紅色，形狀像象牙或龍牙。",
+            features: "枝條有刺、三出複葉",
+            area: "關懷樓前"
+          },
+          {
+            id: 20,
+            name: "福木",
+            aliases: "金錢樹",
+            category: "tree",
+            imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/3/38/Garcinia_subelliptica_kz1.jpg/640px-Garcinia_subelliptica_kz1.jpg",
+            locations: [{ x: 8, y: 25 }],
+            description: "葉片厚革質，對生，形狀像古錢幣，樹形端正。",
+            features: "耐旱耐鹽、乳汁有毒",
+            area: "關懷樓左側"
+          },
+          {
+            id: 21,
+            name: "黃椰子",
+            aliases: "散尾葵",
+            category: "tree",
+            imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e4/Dypsis_lutescens1.jpg/640px-Dypsis_lutescens1.jpg",
+            locations: [{ x: 12, y: 28 }],
+            description: "叢生常綠灌木，葉柄與葉鞘黃色，羽狀複葉。",
+            features: "樹姿優美、充滿南洋風情",
+            area: "關懷樓左側"
+          },
+          {
+            id: 22,
+            name: "酒瓶椰子",
+            aliases: "德利椰子",
+            category: "tree",
+            imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e3/Hyophorbe_lagenicaulis0.jpg/640px-Hyophorbe_lagenicaulis0.jpg",
+            locations: [{ x: 15, y: 28 }],
+            description: "樹幹基部膨大像酒瓶，非常特殊的觀賞椰子。",
+            features: "生長緩慢、環狀葉痕明顯",
+            area: "關懷樓前方"
+          },
+          {
+            id: 23,
+            name: "小葉欖仁",
+            aliases: "雨傘樹",
+            category: "tree",
+            imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f4/Terminalia_mantaly_03.jpg/640px-Terminalia_mantaly_03.jpg",
+            locations: [{ x: 8, y: 35 }],
+            description: "主幹直立，側枝輪生，像一把撐開的雨傘，層次分明。",
+            features: "冬季落葉、樹形優雅",
+            area: "關懷樓左前方"
+          },
+          {
+            id: 24,
+            name: "柳樹 (垂柳)",
+            aliases: "水柳",
+            category: "tree",
+            imageUrl: "https://images.unsplash.com/photo-1547105973-0679858df295?q=80&w=800",
+            locations: [{ x: 18, y: 20 }],
+            description: "枝條細長下垂，姿態柔軟，常種植於水邊。",
+            features: "柔條披拂、喜濕潤",
+            area: "生態池邊"
+          },
+          {
+            id: 25,
+            name: "朱槿",
+            aliases: "扶桑花",
+            category: "shrub",
+            imageUrl: "https://images.unsplash.com/photo-1550948537-130a1ce83314?q=80&w=800",
+            locations: [{ x: 18, y: 25 }],
+            description: "全年開花，花色多樣，雄蕊筒突出是最大特徵。",
+            features: "鄉土植物、花蕊細長",
+            area: "關懷樓前方"
+          },
+          {
+            id: 13,
+            name: "羽裂蔓綠絨",
+            aliases: "小天使",
+            category: "flower",
+            imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/9/91/Thaumatophyllum_bipinnatifidum_kz03.jpg/640px-Thaumatophyllum_bipinnatifidum_kz03.jpg",
+            locations: [{ x: 65, y: 22 }],
+            description: "天南星科觀葉植物，葉片巨大且有深裂，像羽毛一樣。",
+            features: "耐陰性強、氣生根",
+            area: "關東樓轉角"
+          },
+          {
+            id: 14,
+            name: "野薑花",
+            aliases: "蝴蝶花",
+            category: "flower",
+            imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/2/26/Hedychium_coronarium_-_Blume.jpg/640px-Hedychium_coronarium_-_Blume.jpg",
+            locations: [{ x: 68, y: 18 }],
+            description: "花白色，像飛舞的蝴蝶，有濃郁的香氣，生長在水邊。",
+            features: "花香濃郁、地下莖塊狀",
+            area: "生態池"
+          },
+          {
+            id: 15,
+            name: "黑板樹",
+            aliases: "乳木",
+            category: "tree",
+            imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/0/00/Alstonia_scholaris_kz1.jpg/640px-Alstonia_scholaris_kz1.jpg",
+            locations: [{ x: 60, y: 25 }],
+            description: "生長快速的喬木，樹幹筆直，材質輕軟可做黑板。",
+            features: "掌狀複葉、乳汁有毒",
+            area: "關東樓前"
+          },
+          {
+            id: 4,
+            name: "阿勃勒",
+            aliases: "黃金雨",
+            category: "tree",
+            imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e6/Cassia_fistula_1.jpg/640px-Cassia_fistula_1.jpg",
+            locations: [{ x: 92, y: 30 }],
+            description: "初夏開滿金黃色花串，花瓣隨風飄落像黃金雨。",
+            features: "長條形莢果、黃色花序",
+            area: "東校門"
+          },
+          {
+            id: 5,
+            name: "荔枝",
+            aliases: "大荔",
+            category: "tree",
+            imageUrl: "https://images.unsplash.com/photo-1596363505729-4190a9506133?q=80&w=800",
+            locations: [{ x: 92, y: 25 }],
+            description: "著名的果樹，果皮鮮紅有鱗斑，果肉白色多汁。",
+            features: "偶數羽狀複葉、夏季結果",
+            area: "東校門"
+          },
+          {
+            id: 6,
+            name: "波羅蜜",
+            aliases: "木波羅",
+            category: "tree",
+            imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/b/ba/Artocarpus_heterophyllus_Fruits.jpg/640px-Artocarpus_heterophyllus_Fruits.jpg",
+            locations: [{ x: 90, y: 20 }],
+            description: "果實巨大，長在樹幹上，是世界上最大的水果之一。",
+            features: "幹生花/果、果實巨大",
+            area: "東棟右側"
+          },
+          {
+            id: 7,
+            name: "麵包樹",
+            aliases: "羅蜜樹",
+            category: "tree",
+            imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c7/Starr_080610-8369_Artocarpus_altilis.jpg/640px-Starr_080610-8369_Artocarpus_altilis.jpg",
+            locations: [{ x: 88, y: 15 }],
+            description: "葉片大而深裂，果實燒烤後味道像麵包。",
+            features: "葉片厚大、雌雄同株",
+            area: "東棟右側"
+          },
+          {
+            id: 8,
+            name: "桂花",
+            aliases: "木犀",
+            category: "shrub",
+            imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9e/Osmanthus_fragrans_SZ117.png/640px-Osmanthus_fragrans_SZ117.png",
+            locations: [{ x: 82, y: 35 }],
+            description: "常綠灌木，花小但香氣濃郁，常用於製作糕點或花茶。",
+            features: "對生葉、花簇生葉腋",
+            area: "東棟周邊"
+          },
+          {
+            id: 9,
+            name: "銳葉牽牛",
+            aliases: "碗公花",
+            category: "flower",
+            imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e3/Ipomoea_indica_%2828268606105%29.jpg/640px-Ipomoea_indica_%2828268606105%29.jpg",
+            locations: [{ x: 80, y: 15 }],
+            description: "纏繞性藤本，花冠漏斗狀，早晨開花午後凋謝。",
+            features: "藤蔓植物、花色鮮豔",
+            area: "東棟圍牆"
+          },
+          {
+            id: 10,
+            name: "變葉木",
+            aliases: "變色葉",
+            category: "shrub",
+            imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9e/Codiaeum_variegatum_kz3.jpg/640px-Codiaeum_variegatum_kz3.jpg",
+            locations: [{ x: 78, y: 25 }],
+            description: "葉色豐富多變，有紅、黃、綠等斑紋，觀賞價值高。",
+            features: "葉形多變、汁液有毒",
+            area: "東棟"
+          },
+          {
+            id: 11,
+            name: "紅仙丹花",
+            aliases: "矮仙丹",
+            category: "shrub",
+            imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7b/Ixora_coccinea_Jardin_Bot%C3%A1nico_de_Medell%C3%ADn_02.jpg/640px-Ixora_coccinea_Jardin_Bot%C3%A1nico_de_Medell%C3%ADn_02.jpg",
+            locations: [{ x: 75, y: 30 }],
+            description: "花朵密集聚生成球狀，像繡球一樣，花期長。",
+            features: "聚繖花序、蜜源植物",
+            area: "東棟花圃"
+          },
+          {
+            id: 12,
+            name: "輪傘草",
+            aliases: "風車草",
+            category: "flower",
+            imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4c/Cyperus_alternifolius_Y1.JPG/640px-Cyperus_alternifolius_Y1.JPG",
+            locations: [{ x: 72, y: 28 }],
+            description: "莖頂的苞片呈放射狀排列，像一把把小雨傘。",
+            features: "挺水植物、喜濕潤",
+            area: "東棟生態池"
+          },
+          {
+            id: 3,
+            name: "洋紫荊",
+            aliases: "羊蹄甲",
+            category: "tree",
+            imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a3/Bauhinia_blakeana_20051225.jpg/640px-Bauhinia_blakeana_20051225.jpg",
+            locations: [{ x: 92, y: 60 }],
+            description: "葉片頂端裂開像羊蹄，花色粉紅或紫紅，花瓣寬大。",
+            features: "葉形像羊蹄、蘇木科",
+            area: "關馨樓旁"
+          },
+          {
+            id: 30,
+            name: "楊梅",
+            aliases: "樹梅",
+            category: "tree",
+            imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2d/Myrica_rubra_2.jpg/640px-Myrica_rubra_2.jpg",
+            locations: [{ x: 40, y: 78 }],
+            description: "常綠喬木，果實圓球形，成熟時紅色，酸甜可口。",
+            features: "雌雄異株、核果可食",
+            area: "關愛樓前方"
+          },
+          {
+            id: 28,
+            name: "印度橡膠",
+            aliases: "印度榕",
+            category: "tree",
+            imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/0/06/Ficus_elastica_002.JPG/640px-Ficus_elastica_002.JPG",
+            locations: [{ x: 10, y: 65 }],
+            description: "葉片厚革質，橢圓形，頂芽有紅色的托葉包被。",
+            features: "氣生根、白色乳汁",
+            area: "幼兒園/西校門"
+          },
+          {
+            id: 29,
+            name: "竹柏",
+            aliases: "山杉",
+            category: "tree",
+            imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c6/Nageia_nagi_6.jpg/640px-Nageia_nagi_6.jpg",
+            locations: [{ x: 25, y: 75 }, { x: 30, y: 75 }],
+            description: "葉片像竹葉但對生，搓揉有芭樂的香氣。",
+            features: "裸子植物、揉之有異香",
+            area: "幼兒園前方"
+          },
+          {
+            id: 26,
+            name: "茄苳",
+            aliases: "重陽木",
+            category: "tree",
+            imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8a/Bischofia_javanica_03.jpg/640px-Bischofia_javanica_03.jpg",
+            locations: [{ x: 10, y: 50 }],
+            description: "本土原生樹種，壽命長，果實成串，是鳥類的最愛。",
+            features: "三出複葉、優良誘鳥植物",
+            area: "西校門"
+          },
+          {
+            id: 27,
+            name: "梅花",
+            aliases: "春梅",
+            category: "tree",
+            imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7c/Prunus_mume_01.jpg/640px-Prunus_mume_01.jpg",
+            locations: [{ x: 12, y: 55 }],
+            description: "寒冬中開花，象徵堅忍不拔，花五瓣，有清香。",
+            features: "先花後葉、核果酸味",
+            area: "西校門"
+          }
+        ];
+
+        const MapMarker = ({ plant, position, isSelected, onClick }) => (
+          <button
+            onClick={(e) => { e.stopPropagation(); onClick(plant); }}
+            className={`absolute transform -translate-x-1/2 -translate-y-1/2 transition-all duration-300 group z-10 marker-bounce ${isSelected ? 'scale-125 z-20' : 'scale-100 hover:scale-110'}`}
+            style={{ left: `${position.x}%`, top: `${position.y}%` }}
+          >
+            <div className={`relative flex flex-col items-center`}>
+              <MapPin size={28} className={`${isSelected ? 'text-red-600 fill-red-100' : 'text-emerald-600 fill-emerald-100'} drop-shadow-md`} />
+              <span className={`mt-1 px-2 py-0.5 text-[10px] md:text-xs font-bold rounded-full shadow-sm whitespace-nowrap bg-white/95 backdrop-blur-sm border border-slate-200 ${isSelected ? 'text-red-700 ring-2 ring-red-400' : 'text-emerald-800'}`}>
+                {plant.id}. {plant.name}
+              </span>
+            </div>
+          </button>
+        );
+
+        const SchoolMapSVG = () => (
+          <svg viewBox="0 0 1000 800" className="w-full h-full bg-[#f0fdf4] rounded-xl border-2 border-emerald-100">
+            <defs>
+              <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+                <feGaussianBlur in="SourceAlpha" stdDeviation="3" />
+                <feOffset dx="2" dy="2" result="offsetblur" />
+                <feComponentTransfer><feFuncA type="linear" slope="0.3" /></feComponentTransfer>
+                <feMerge><feMergeNode /><feMergeNode in="SourceGraphic" /></feMerge>
+              </filter>
+            </defs>
+            <g transform="translate(920, 50)">
+              <circle cx="0" cy="0" r="25" fill="white" stroke="#334155" strokeWidth="2" />
+              <path d="M0 -20 L5 -5 L20 0 L5 5 L0 20 L-5 5 L-20 0 L-5 -5 Z" fill="#334155" />
+              <text x="0" y="-28" textAnchor="middle" fontSize="14" fontWeight="bold" fill="#334155">N</text>
+            </g>
+            <rect x="50" y="50" width="300" height="100" fill="#e0f2fe" stroke="#7dd3fc" strokeWidth="3" rx="4" filter="url(#shadow)" />
+            <text x="200" y="110" fill="#0369a1" fontSize="24" fontWeight="bold" textAnchor="middle">關懷樓</text>
+            <rect x="380" y="50" width="400" height="100" fill="#ffedd5" stroke="#fdba74" strokeWidth="3" rx="4" filter="url(#shadow)" />
+            <text x="580" y="110" fill="#c2410c" fontSize="24" fontWeight="bold" textAnchor="middle">關東樓</text>
+            <rect x="820" y="160" width="120" height="350" fill="#dcfce7" stroke="#86efac" strokeWidth="3" rx="4" filter="url(#shadow)" />
+            <text x="880" y="335" fill="#15803d" fontSize="24" fontWeight="bold" textAnchor="middle" style={{writingMode: "vertical-rl"}}>東棟</text>
+            <rect x="820" y="550" width="120" height="200" fill="#fef9c3" stroke="#fde047" strokeWidth="3" rx="4" filter="url(#shadow)" />
+            <text x="880" y="650" fill="#a16207" fontSize="24" fontWeight="bold" textAnchor="middle" style={{writingMode: "vertical-rl"}}>關馨樓</text>
+            <rect x="50" y="650" width="710" height="90" fill="#fce7f3" stroke="#fbcfe8" strokeWidth="3" rx="4" filter="url(#shadow)" />
+            <line x1="280" y1="650" x2="280" y2="740" stroke="#fbcfe8" strokeWidth="2" strokeDasharray="5,5" />
+            <text x="165" y="705" fill="#a21caf" fontSize="22" fontWeight="bold" textAnchor="middle">幼兒園</text>
+            <text x="500" y="705" fill="#be185d" fontSize="24" fontWeight="bold" textAnchor="middle">關愛樓</text>
+            <ellipse cx="480" cy="400" rx="300" ry="150" fill="none" stroke="#ef4444" strokeWidth="40" strokeOpacity="0.1" />
+            <ellipse cx="480" cy="400" rx="300" ry="150" fill="none" stroke="#ef4444" strokeWidth="2" strokeDasharray="10 5" />
+            <text x="480" y="410" fill="#ef4444" fontSize="30" fontWeight="bold" textAnchor="middle" opacity="0.3">操場</text>
+            <path d="M 220 180 Q 280 160 320 200 Q 340 240 280 260 Q 220 280 180 240 Q 160 200 220 180 Z" fill="#bae6fd" stroke="#38bdf8" strokeWidth="2" opacity="0.7"/>
+            <text x="260" y="230" fill="#0284c7" fontSize="14" textAnchor="middle">生態池</text>
+            <circle cx="720" cy="220" r="30" fill="#bae6fd" stroke="#38bdf8" strokeWidth="2" opacity="0.7" />
+            <g>
+                <rect x="360" y="10" width="60" height="15" fill="#475569" />
+                <text x="390" y="38" fill="#475569" fontSize="14" textAnchor="middle" fontWeight="bold">北校門</text>
+                <rect x="960" y="400" width="15" height="60" fill="#475569" />
+                <text x="940" y="435" fill="#475569" fontSize="14" textAnchor="end" fontWeight="bold" style={{writingMode: "vertical-rl"}}>東校門</text>
+                <rect x="10" y="450" width="15" height="60" fill="#475569" />
+                <text x="35" y="480" fill="#475569" fontSize="14" textAnchor="start" fontWeight="bold" style={{writingMode: "vertical-rl"}}>西校門</text>
+            </g>
+            <rect x="760" y="650" width="40" height="90" fill="#e2e8f0" stroke="#94a3b8" />
+            <text x="780" y="695" fill="#64748b" fontSize="14" textAnchor="middle" style={{writingMode: "vertical-rl"}}>樓梯</text>
+          </svg>
+        );
+
+        function App() {
+          const [selectedPlant, setSelectedPlant] = useState(null);
+          const [searchTerm, setSearchTerm] = useState("");
+          const [filterCategory, setFilterCategory] = useState("all");
+
+          const filteredPlants = useMemo(() => {
+            return PLANTS_DATA.filter(plant => {
+              const matchesSearch = plant.name.includes(searchTerm) || plant.aliases.includes(searchTerm);
+              const matchesCategory = filterCategory === "all" || plant.category === filterCategory;
+              return matchesSearch && matchesCategory;
+            });
+          }, [searchTerm, filterCategory]);
+
+          const categories = [
+            { id: 'all', label: '全部', icon: Leaf },
+            { id: 'tree', label: '喬木', icon: TreeDeciduous },
+            { id: 'shrub', label: '灌木', icon: Sprout },
+            { id: 'flower', label: '花卉/其他', icon: Flower2 },
+          ];
+
+          const hasImage = (url) => url && url.length > 0;
+
+          return (
+            <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-800">
+              <header className="bg-emerald-700 text-white shadow-lg sticky top-0 z-50">
+                <div className="container mx-auto px-4 py-4">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-white/20 rounded-full"><Leaf className="w-6 h-6 text-yellow-300" /></div>
+                      <div><h1 className="text-2xl font-bold tracking-wide">關東國小</h1><p className="text-xs text-emerald-200">校園植物導覽地圖</p></div>
+                    </div>
+                    <div className="relative w-full md:w-96 group">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-emerald-700 w-5 h-5" />
+                      <input type="text" placeholder="輸入植物名稱或別名搜尋..." className="w-full pl-10 pr-4 py-2 rounded-full bg-white/95 text-slate-800 placeholder-emerald-700/50 focus:outline-none focus:ring-2 focus:ring-yellow-400 shadow-inner transition-all" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                    </div>
+                  </div>
+                </div>
+              </header>
+              <main className="flex-1 container mx-auto px-4 py-6 flex flex-col lg:flex-row gap-6">
+                <div className="w-full lg:w-2/3 flex flex-col gap-4">
+                  <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-200 relative group">
+                    <div className="relative w-full aspect-[5/4] bg-[#f0fdf4] overflow-hidden" onClick={() => setSelectedPlant(null)}>
+                      <SchoolMapSVG />
+                      {filteredPlants.map(plant => (
+                        plant.locations.map((loc, index) => (
+                          <MapMarker key={`${plant.id}-${index}`} plant={plant} position={loc} isSelected={selectedPlant?.id === plant.id} onClick={setSelectedPlant} />
+                        ))
+                      ))}
+                      <div className="absolute bottom-4 left-4 bg-white/95 backdrop-blur px-4 py-3 rounded-xl shadow-lg text-sm text-slate-600 border border-slate-200 z-30">
+                        <p className="flex items-center gap-2 font-bold text-emerald-800 mb-1"><Info size={16} /> 操作說明</p>
+                        <p className="text-xs">• 點擊 <MapPin className="inline w-3 h-3 text-emerald-600"/> 查看詳情</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="bg-white p-4 rounded-xl shadow-md border border-slate-100 flex flex-wrap gap-2 justify-center lg:justify-start">
+                    {categories.map(cat => (
+                      <button key={cat.id} onClick={() => setFilterCategory(cat.id)} className={`flex items-center gap-2 px-5 py-2.5 rounded-full transition-all duration-200 font-medium text-sm ${filterCategory === cat.id ? 'bg-emerald-600 text-white shadow-lg scale-105' : 'bg-slate-100 text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 hover:shadow'}`}>
+                        <cat.icon size={16} />{cat.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="w-full lg:w-1/3 flex flex-col gap-4 h-[calc(100vh-120px)] sticky top-24">
+                  {selectedPlant ? (
+                    <div className="bg-white rounded-2xl shadow-xl border-t-4 border-emerald-500 overflow-hidden flex flex-col h-full animate-in slide-in-from-right-4 duration-300">
+                      <div className="relative h-56 bg-slate-100 group">
+                        {hasImage(selectedPlant.imageUrl) ? (
+                          <img src={selectedPlant.imageUrl} alt={selectedPlant.name} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }} />
+                        ) : null}
+                        <div className={`absolute inset-0 bg-gradient-to-br from-emerald-100 to-teal-200 flex items-center justify-center ${hasImage(selectedPlant.imageUrl) ? 'hidden' : 'flex'}`} style={{display: hasImage(selectedPlant.imageUrl) ? 'none' : 'flex'}}>
+                          <div className="text-emerald-800/20"><Leaf size={120} /></div>
+                        </div>
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent flex flex-col justify-end p-6">
+                          <div className="text-white drop-shadow-md">
+                            <span className="inline-block px-2 py-0.5 bg-emerald-500/80 text-white text-[10px] font-bold rounded mb-1 backdrop-blur-sm">No. {selectedPlant.id}</span>
+                            <h2 className="text-3xl font-bold mb-1">{selectedPlant.name}</h2>
+                            <p className="text-emerald-100 text-sm opacity-90 font-medium">{selectedPlant.aliases}</p>
+                          </div>
+                        </div>
+                        <button onClick={() => setSelectedPlant(null)} className="absolute top-3 right-3 p-2 bg-black/30 hover:bg-black/50 rounded-full text-white transition-colors backdrop-blur-sm z-20"><X size={20} /></button>
+                      </div>
+                      <div className="p-6 space-y-5 overflow-y-auto custom-scrollbar flex-1">
+                        <div className="flex items-center gap-3">
+                          <span className={`px-3 py-1 rounded-full text-xs font-bold border ${selectedPlant.category === 'tree' ? 'bg-green-100 text-green-700 border-green-200' : selectedPlant.category === 'flower' ? 'bg-pink-100 text-pink-700 border-pink-200' : 'bg-orange-100 text-orange-700 border-orange-200'}`}>
+                            {categories.find(c => c.id === selectedPlant.category)?.label}
+                          </span>
+                          <span className="flex items-center gap-1 text-slate-500 text-xs font-medium"><MapPin size={14} /> {selectedPlant.area}</span>
+                        </div>
+                        <div className="space-y-2">
+                          <h3 className="font-bold text-slate-800 flex items-center gap-2 text-lg"><Info size={20} className="text-emerald-600"/> 植物介紹</h3>
+                          <p className="text-slate-600 leading-relaxed text-sm bg-slate-50 p-3 rounded-lg border border-slate-100">{selectedPlant.description}</p>
+                        </div>
+                        <div className="space-y-2">
+                          <h3 className="font-bold text-amber-700 flex items-center gap-2 text-lg"><AlertTriangle size={20} className="text-amber-500"/> 觀察重點</h3>
+                          <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 text-sm text-amber-900 leading-relaxed">{selectedPlant.features}</div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-white rounded-2xl shadow-lg border border-slate-100 flex flex-col h-full overflow-hidden">
+                      <div className="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center shrink-0">
+                        <h2 className="font-bold text-slate-700 flex items-center gap-2"><Leaf size={20} className="text-emerald-600" /> 植物列表</h2>
+                        <span className="text-xs bg-slate-200 px-2 py-1 rounded-full text-slate-600 font-bold">{filteredPlants.length} 種</span>
+                      </div>
+                      <div className="overflow-y-auto p-2 space-y-2 flex-1 scrollbar-thin scrollbar-thumb-emerald-200">
+                        {filteredPlants.map(plant => (
+                          <button key={plant.id} onClick={() => setSelectedPlant(plant)} className="w-full text-left p-2 rounded-xl hover:bg-emerald-50 transition-all duration-200 flex items-center gap-3 group border border-transparent hover:border-emerald-200 hover:shadow-sm">
+                            <div className="w-12 h-12 rounded-lg overflow-hidden bg-slate-200 shrink-0 relative">
+                               {hasImage(plant.imageUrl) ? (
+                                 <img src={plant.imageUrl} alt="" className="w-full h-full object-cover" />
+                               ) : (
+                                 <div className={`w-full h-full flex items-center justify-center text-lg font-bold ${plant.category === 'tree' ? 'bg-green-100 text-green-600' : plant.category === 'flower' ? 'bg-pink-100 text-pink-600' : 'bg-orange-100 text-orange-600'}`}>{plant.id}</div>
+                               )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h3 className="font-bold text-slate-800 group-hover:text-emerald-700 truncate">{plant.name}</h3>
+                              <p className="text-xs text-slate-400 truncate">{plant.aliases}</p>
+                            </div>
+                            <MapPin size={16} className="text-emerald-300 opacity-0 group-hover:opacity-100 transition-opacity transform group-hover:scale-110" />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </main>
+            </div>
+          );
+        }
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
